@@ -1,0 +1,45 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: "1.23"
+
+      - name: Generate version tag
+        id: version
+        run: echo "::set-output name=tag::$(date +%Y%m%d-%H%M%S)"
+
+      - name: Build
+        run: |
+          CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o main
+
+      - name: Deploy to VM
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USERNAME }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          source: "main,.env,Dockerfile,docker-compose.yml"
+          target: "~/huurwoning/"
+
+      - name: Restart Application
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USERNAME }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            cd ~/huurwoning/
+            docker build -t huurwoning:${{ steps.version.outputs.tag }} -f Dockerfile.prod .
+            docker-compose -f docker-compose.prod.yml down
+            docker-compose -f docker-compose.prod.yml up -d
