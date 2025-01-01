@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"huurwoning/config"
 	"log"
 	"net/http"
 	"os"
@@ -46,14 +47,35 @@ type GlobalLogger struct {
 	client   *http.Client
 }
 
+type BasicAuthTransport struct {
+	Username string
+	Password string
+	Base     http.RoundTripper
+}
+
+func (t *BasicAuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req.SetBasicAuth(t.Username, t.Password)
+	return t.Base.RoundTrip(req)
+}
+
 func NewGlobalLogger(isLocalDev bool) (*GlobalLogger, error) {
+	config, err := config.LoadConfig()
+	if err != nil {
+		return nil, fmt.Errorf("Failed to load config: %v", err)
+	}
 	client := &http.Client{
 		Timeout: 5 * time.Second,
 	}
 
-	url := "http://localhost:12345/loki/api/v1/push"
+	url := ""
 	if !isLocalDev {
-		url = "http://localhost:12345/loki/api/v1/push"
+		url = "https://logs-prod-012.grafana.net/loki/api/v1/push"
+	}
+
+	client.Transport = &BasicAuthTransport{
+		Username: config.GRAFANA_USERNAME,
+		Password: config.GRAFANA_PASSWORD,
+		Base:     http.DefaultTransport,
 	}
 
 	return &GlobalLogger{
@@ -143,7 +165,7 @@ func (l *Logger) localLogFunc(severity Severity) LogFunc {
 	}
 }
 
-// prodLogFunc creates a logging function for production that sends logs to Alloy
+// prodLogFunc creates a logging function for production that sends logs to Loki
 func (l *Logger) prodLogFunc(severity Severity) LogFunc {
 	return func(msg string, args ...interface{}) {
 		// Create labels and fields maps
@@ -158,6 +180,13 @@ func (l *Logger) prodLogFunc(severity Severity) LogFunc {
 			if i+1 < len(args) {
 				fields[args[i].(string)] = args[i+1]
 			}
+		}
+
+		// Format the message with fields if present
+		formattedMsg := msg
+		if len(fields) > 0 {
+			fieldsJSON, _ := json.Marshal(fields)
+			formattedMsg = fmt.Sprintf("%s %s", msg, string(fieldsJSON))
 		}
 
 		// Format the log entry for Loki
@@ -176,7 +205,7 @@ func (l *Logger) prodLogFunc(severity Severity) LogFunc {
 					Values: [][]string{
 						{
 							time.Now().UTC().Format(time.RFC3339Nano),
-							msg,
+							formattedMsg,
 						},
 					},
 				},
@@ -189,16 +218,21 @@ func (l *Logger) prodLogFunc(severity Severity) LogFunc {
 			return
 		}
 
-		// Send to Alloy
+		// Debug logging (consider making this conditional)
+		if l.stdout != nil {
+			l.stdout.Printf("Sending to Loki: %s", string(jsonData))
+		}
+
+		// Send to Loki
 		resp, err := l.client.Post(l.url, "application/json", bytes.NewBuffer(jsonData))
 		if err != nil {
-			log.Printf("Error sending log to Alloy: %v", err)
+			log.Printf("Error sending log to Loki: %v", err)
 			return
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-			log.Printf("Unexpected status code from Alloy: %d", resp.StatusCode)
+			log.Printf("Unexpected status code from Loki: %d", resp.StatusCode)
 		}
 	}
 }
