@@ -1,10 +1,9 @@
 # huurwoning/docker-compose.yml
 services:
   app:
-    logging:
-      driver: gcplogs
-      options:
-        gcp-project: "huurwoning"
+    image: huurwoning:latest
+    volumes:
+      - ./data:/app/data:rw
     build: .
     init: true
     shm_size: "2gb" # Increase shared memory size
@@ -15,3 +14,4 @@ services:
       - .env
     mem_limit: 4g # Set memory limit to 4GB
     mem_reservation: 2g # Reserve 2GB of memory
+    restart: unless-stopped
