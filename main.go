@@ -20,7 +20,7 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	globalLogger, err := logger.NewGlobalLogger(config.ENVIRONMENT == "development")
+	globalLogger, err := logger.NewGlobalLogger()
 	if err != nil {
 		log.Fatalf("Failed to create global logger: %v", err)
 	}

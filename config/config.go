@@ -29,9 +29,6 @@ type Config struct {
 	SMTP_PASSWORD       string
 	TO_EMAIL            string
 	FROM_EMAIL          string
-
-	GRAFANA_USERNAME string
-	GRAFANA_PASSWORD string
 }
 
 func LoadConfig() (*Config, error) {
@@ -66,9 +63,6 @@ func LoadConfig() (*Config, error) {
 		SMTP_PASSWORD:       os.Getenv("SMTP_PASSWORD"),
 		TO_EMAIL:            os.Getenv("TO_EMAIL"),
 		FROM_EMAIL:          os.Getenv("FROM_EMAIL"),
-
-		GRAFANA_USERNAME: os.Getenv("GRAFANA_USERNAME"),
-		GRAFANA_PASSWORD: os.Getenv("GRAFANA_PASSWORD"),
 	}
 
 	return config, nil
