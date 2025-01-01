@@ -2,7 +2,7 @@ name: Build and Deploy
 
 on:
   push:
-    branches: [main]
+    branches: [master]
 
 jobs:
   build-and-deploy:
@@ -40,6 +40,7 @@ jobs:
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
             cd ~/huurwoning/
-            docker build -t huurwoning:${{ steps.version.outputs.tag }} -f Dockerfile.prod .
-            docker-compose -f docker-compose.prod.yml down
-            docker-compose -f docker-compose.prod.yml up -d
+            docker build -t huurwoning:${{ steps.version.outputs.tag }} .
+            docker tag huurwoning:${{ steps.version.outputs.tag }} huurwoning:latest
+            docker-compose down
+            docker-compose up -d
