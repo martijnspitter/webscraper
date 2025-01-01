@@ -12,6 +12,8 @@ type Config struct {
 	ENVIRONMENT string
 	DEBUG_MODE  bool
 
+	DB_PATH string
+
 	USER_NAME  string
 	REBO_PW    string
 	BEUMER_PW  string
@@ -43,6 +45,8 @@ func LoadConfig() (*Config, error) {
 	config := &Config{
 		ENVIRONMENT: os.Getenv("ENVIRONMENT"),
 		DEBUG_MODE:  os.Getenv("DEBUG_MODE") == "true",
+
+		DB_PATH: os.Getenv("DB_PATH"),
 
 		USER_NAME:  os.Getenv("USER_NAME"),
 		REBO_PW:    os.Getenv("REBO_PW"),

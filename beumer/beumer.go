@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"huurwoning/browser"
 	"huurwoning/config"
+	"huurwoning/db"
 	"huurwoning/logger"
 	"huurwoning/scraper"
 	"strings"
@@ -11,7 +12,7 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
-func Beumer(b *browser.Browser, globalLogger *logger.GlobalLogger, url string, beumerPrevResults map[string]struct{}, multipleResultsFromPreviousRun *[]string) error {
+func Beumer(b *browser.Browser, globalLogger *logger.GlobalLogger, url string, db *db.Database) error {
 	logger := globalLogger.Logger("BEUMER")
 
 	config, err := config.LoadConfig()
@@ -19,7 +20,7 @@ func Beumer(b *browser.Browser, globalLogger *logger.GlobalLogger, url string, b
 		return fmt.Errorf("Failed to load config: %v", err)
 	}
 
-	scraper, err := scraper.NewScraper(b, "BEUMER", url, config.BEUMER_PW, beumerPrevResults, false, logger, GetResultsFactory, false, multipleResultsFromPreviousRun)
+	scraper, err := scraper.NewScraper(b, "BEUMER", url, config.BEUMER_PW, false, logger, GetResultsFactory, false, db)
 	if err != nil {
 		return fmt.Errorf("failed to create scraper: %v", err)
 	}
@@ -27,7 +28,7 @@ func Beumer(b *browser.Browser, globalLogger *logger.GlobalLogger, url string, b
 
 	scraper.Logger.Info("Start")
 
-	newResults, err := scraper.GetResults(scraper, b, beumerPrevResults)
+	newResults, err := scraper.GetResults(scraper, b)
 	if err != nil {
 		scraper.CheckForNewResults(newResults)
 		scraper.UpdatePrevResults(newResults)
@@ -43,7 +44,7 @@ func GetResultsFactory() scraper.GetResults {
 	return GetResults
 }
 
-func GetResults(scraper *scraper.Scraper, b *browser.Browser, prevResults map[string]struct{}) (map[string]struct{}, error) {
+func GetResults(scraper *scraper.Scraper, b *browser.Browser) ([]string, error) {
 	var results []string
 
 	err := b.RunInTab(scraper.TabCtx,
@@ -57,11 +58,11 @@ func GetResults(scraper *scraper.Scraper, b *browser.Browser, prevResults map[st
 	if err != nil {
 		scraper.Logger.Error("Error getting results", err)
 		scraper.HasError = true
-		return prevResults, fmt.Errorf("Error getting results %v", err)
+		return results, fmt.Errorf("Error getting results %v", err)
 	}
 
 	// Create a map to store the current results
-	currentResults := make(map[string]struct{})
+	currentResults := make([]string, 0, len(results))
 
 	// Iterate over the elements and store their text in the current results map
 	for _, result := range results {
@@ -69,7 +70,7 @@ func GetResults(scraper *scraper.Scraper, b *browser.Browser, prevResults map[st
 			continue
 		}
 		trimmed := strings.TrimSpace(result)
-		currentResults[trimmed] = struct{}{}
+		currentResults = append(currentResults, trimmed)
 	}
 
 	return currentResults, nil

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"huurwoning/browser"
+	"huurwoning/db"
 	"huurwoning/logger"
 	"huurwoning/reporting"
 
@@ -13,56 +14,58 @@ import (
 )
 
 type GetResultsFactory func() GetResults
-type GetResults func(s *Scraper, b *browser.Browser, prevResults map[string]struct{}) (map[string]struct{}, error)
+type GetResults func(s *Scraper, b *browser.Browser) ([]string, error)
 
 type Scraper struct {
-	name                           string
-	Url                            string
-	username                       string
-	password                       string
-	prevResults                    map[string]struct{}
-	HasError                       bool
-	Logger                         *logger.Logger
-	GetResults                     GetResults
-	isDebugging                    bool
-	multipleResultsFromPreviousRun *[]string
-	TabCtx                         context.Context
-	tabCancel                      context.CancelFunc
-	browser                        *browser.Browser
+	name        string
+	Url         string
+	username    string
+	password    string
+	HasError    bool
+	Logger      *logger.Logger
+	GetResults  GetResults
+	isDebugging bool
+	TabCtx      context.Context
+	tabCancel   context.CancelFunc
+	browser     *browser.Browser
+	db          *db.Database
 }
 
-func (s *Scraper) UpdatePrevResults(newResults map[string]struct{}) {
+func (s *Scraper) UpdatePrevResults(newResults []string) {
 	// unable to get all the new results, so we'll just return
-	if s.HasError || len(*s.multipleResultsFromPreviousRun) > 0 || len(newResults) == 0 {
+	if s.HasError || len(newResults) == 0 {
 		return
 	}
-	for k := range s.prevResults {
-		delete(s.prevResults, k)
-	}
-	for k, v := range newResults {
-		s.prevResults[k] = v
+
+	for _, k := range newResults {
+		err := s.db.UpsertProperty(k, s.name)
+		if err != nil {
+			s.Logger.Error("Failed to upsert property", "error", err)
+			s.HasError = true
+			return
+		}
 	}
 }
 
-func (s *Scraper) CheckForNewResults(currentResults map[string]struct{}) {
-	if len(currentResults) == 0 {
-		s.Logger.Warn("No results found.")
+func (s *Scraper) CheckForNewResults(foundResults []string) {
+	prevProperties, err := s.db.GetActiveProperties(s.name)
+	if err != nil {
+		s.Logger.Error("Failed to get active properties", "error", err)
+		s.HasError = true
 		return
+	}
+
+	prevResults := make(map[string]struct{})
+	for _, p := range prevProperties {
+		prevResults[p.Address] = struct{}{}
 	}
 
 	// Compare current results with previous results and log new results
 	newResults := make([]string, 0)
-	for text := range currentResults {
-		if _, found := s.prevResults[text]; !found {
+	for _, text := range foundResults {
+		if _, found := prevResults[text]; !found {
 			newResults = append(newResults, text)
 		}
-	}
-
-	// When we find multiple new results the first time dont send an alert
-	if len(newResults) > 1 && len(*s.multipleResultsFromPreviousRun) == 0 {
-		s.Logger.Warn("Found multiple results! Not alerting", "results", strings.Join(newResults, ", "))
-		*s.multipleResultsFromPreviousRun = newResults
-		return
 	}
 
 	switch len(newResults) {
@@ -82,7 +85,7 @@ func (s *Scraper) CheckForNewResults(currentResults map[string]struct{}) {
 		}
 	}
 
-	*s.multipleResultsFromPreviousRun = []string{}
+	s.db.MarkInactive(s.name, newResults)
 }
 
 func (s *Scraper) createTab() error {
@@ -181,19 +184,18 @@ func (s *Scraper) LoginIfNeeded(b *browser.Browser) error {
 	return nil
 }
 
-func NewScraper(b *browser.Browser, name, url string, password string, prevResults map[string]struct{}, hasError bool, logger *logger.Logger, getResultsFactory GetResultsFactory, isDebugging bool, multipleResultsFromPreviousRun *[]string) (*Scraper, error) {
+func NewScraper(b *browser.Browser, name, url string, password string, hasError bool, logger *logger.Logger, getResultsFactory GetResultsFactory, isDebugging bool, db *db.Database) (*Scraper, error) {
 	s := &Scraper{
-		name:                           name,
-		Url:                            url,
-		username:                       "martijnspitter@gmail.com",
-		password:                       password,
-		prevResults:                    prevResults,
-		HasError:                       hasError,
-		Logger:                         logger,
-		GetResults:                     getResultsFactory(),
-		isDebugging:                    isDebugging,
-		multipleResultsFromPreviousRun: multipleResultsFromPreviousRun,
-		browser:                        b,
+		name:        name,
+		Url:         url,
+		username:    "martijnspitter@gmail.com",
+		password:    password,
+		HasError:    hasError,
+		Logger:      logger,
+		GetResults:  getResultsFactory(),
+		isDebugging: isDebugging,
+		browser:     b,
+		db:          db,
 	}
 
 	err := s.createTab()

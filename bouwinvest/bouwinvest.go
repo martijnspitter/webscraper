@@ -3,6 +3,7 @@ package bouwinvest
 import (
 	"fmt"
 	"huurwoning/browser"
+	"huurwoning/db"
 	"huurwoning/logger"
 	"huurwoning/scraper"
 	"strings"
@@ -11,10 +12,10 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
-func BouwInvest(b *browser.Browser, globalLogger *logger.GlobalLogger, url string, prevResults map[string]struct{}, multipleResultsFromPreviousRun *[]string) error {
+func BouwInvest(b *browser.Browser, globalLogger *logger.GlobalLogger, url string, db *db.Database) error {
 	logger := globalLogger.Logger("BOUWINVEST")
 
-	scraper, err := scraper.NewScraper(b, "BOUWINVEST", url, "", prevResults, false, logger, GetResultsFactory, false, multipleResultsFromPreviousRun)
+	scraper, err := scraper.NewScraper(b, "BOUWINVEST", url, "", false, logger, GetResultsFactory, false, db)
 	if err != nil {
 		return fmt.Errorf("failed to create scraper: %v", err)
 	}
@@ -22,7 +23,7 @@ func BouwInvest(b *browser.Browser, globalLogger *logger.GlobalLogger, url strin
 
 	scraper.Logger.Info("Start")
 
-	newResults, err := scraper.GetResults(scraper, b, prevResults)
+	newResults, err := scraper.GetResults(scraper, b)
 	if err != nil {
 		scraper.CheckForNewResults(newResults)
 		scraper.UpdatePrevResults(newResults)
@@ -38,7 +39,7 @@ func GetResultsFactory() scraper.GetResults {
 	return GetResults
 }
 
-func GetResults(scraper *scraper.Scraper, b *browser.Browser, prevResults map[string]struct{}) (map[string]struct{}, error) {
+func GetResults(scraper *scraper.Scraper, b *browser.Browser) ([]string, error) {
 	allResults := make(map[string]struct{})
 
 	var mu sync.Mutex
@@ -48,11 +49,19 @@ func GetResults(scraper *scraper.Scraper, b *browser.Browser, prevResults map[st
 	for page := 1; page <= maxPages; page++ {
 		err := processPage(scraper, b, page, &mu, allResults)
 		if err != nil {
-			return prevResults, err
+			return mapToSlice(allResults), err
 		}
 	}
 
-	return allResults, nil
+	return mapToSlice(allResults), nil
+}
+
+func mapToSlice(m map[string]struct{}) []string {
+	result := make([]string, 0, len(m)) // Pre-allocate slice with capacity
+	for key := range m {
+		result = append(result, key)
+	}
+	return result
 }
 
 func processPage(scraper *scraper.Scraper, b *browser.Browser, page int, mu *sync.Mutex, allResults map[string]struct{}) error {

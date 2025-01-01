@@ -80,6 +80,8 @@ func sendEmail(body string, subject string) (string, error) {
 	e.Headers.Add("X-Priority", "1")    // 1 = High, 3 = Normal, 5 = Low
 	e.Headers.Add("Importance", "High") // High, Normal, Low
 
+	fmt.Println(config.SMTP_PASSWORD)
+
 	err = e.Send(fmt.Sprintf("%s:%d", config.SMTP_SERVER, config.SMTP_PORT), smtp.PlainAuth("", config.SMTP_USERNAME, config.SMTP_PASSWORD, config.SMTP_SERVER))
 	if err != nil {
 		return "", fmt.Errorf("Error sending email: %v", err)
