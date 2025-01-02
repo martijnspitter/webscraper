@@ -85,8 +85,6 @@ func processPage(scraper *scraper.Scraper, b *browser.Browser, page int, mu *syn
 		return err
 	}
 
-	scraper.Logger.Info(fmt.Sprintf("Found multiple results on page %d: %v", page, strings.Join(results, ", ")))
-
 	mu.Lock()
 	for _, result := range results {
 		if result == "" {
